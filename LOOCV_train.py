@@ -54,12 +54,11 @@ def plot_result(true, pred, corr, rmse, acc, sheet_name, save_dir):
     idx = np.arange(len(true))
 
     plt.fill_between(idx, true, pred_s, where=true>pred_s, color='gray', alpha=0.25, label='Error region')
-    plt.fill_between(idx, true, pred_s, where=true<pred_s, color='gray', alpha=0.25)
 
+    plt.fill_between(idx, true, pred_s, where=true<pred_s, color='gray', alpha=0.25)
     plt.plot(idx, true, 'k-', lw=2, label="True ICP")
     plt.plot(idx, pred_s, 'r--', lw=2, label="Predicted ICP")
-
-    plt.title(f"[TRAIN] — Sheet: {sheet_name}\n"
+    plt.title(f"[Train] — Sheet: {sheet_name}\n"
               f"Corr={corr:.2f} | RMSE={rmse:.2f} | Acc={acc:.1f}%", fontsize=11)
     plt.xlabel("Sample Index", fontsize=11)
     plt.ylabel("ICP (mmHg)", fontsize=11)
@@ -103,7 +102,6 @@ for i in range(1, 51):  # 1~50
         continue
 
     print(f"\n==== {sheet_name} | Data: {X.shape} ====")
-
     scaler_y = RobustScaler()
     y_s = scaler_y.fit_transform(y)
 
@@ -114,6 +112,7 @@ for i in range(1, 51):  # 1~50
         train_idx = [k for k in range(len(X)) if k != j]
 
         sx = RobustScaler()
+
         X_train, X_test = sx.fit_transform(X[train_idx]), sx.transform(X[[j]])
         y_train, y_test = y_s[train_idx], y_s[[j]]
 
