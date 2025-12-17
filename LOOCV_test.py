@@ -57,6 +57,7 @@ def plot_pred_curve(pred, sheet, save_dir):
     plt.grid(alpha=0.3)
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, f"{sheet}.png"), dpi=200)
+    plt.show()
     plt.close()
 
 
