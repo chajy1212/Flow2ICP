@@ -86,25 +86,65 @@ def load_subject(excel_path, sheet_name):
     return X, y
 
 
-def plot_result(true, pred, corr, rmse, acc, sheet_name, save_dir):
-    pred_s = smooth(pred)
+# def plot_result(true, pred, corr, rmse, acc, sheet_name, save_dir):
+#     pred_s = smooth(pred)
+#
+#     plt.figure(figsize=(10,4))
+#     idx = np.arange(len(true))
+#
+#     plt.fill_between(idx, true, pred_s,
+#                      where=true > pred_s,
+#                      color='gray', alpha=0.25)
+#     plt.fill_between(idx, true, pred_s,
+#                      where=true < pred_s,
+#                      color='gray', alpha=0.25)
+#
+#     plt.plot(idx, true, 'k-', lw=2, label="True ICP")
+#     plt.plot(idx, pred_s, 'r--', lw=2, label="Predicted ICP")
+#
+#     plt.title(f"[LOSO Test] — {sheet_name}\n"
+#               f"Corr={corr:.2f} | RMSE={rmse:.2f} | Acc={acc:.1f}%",
+#               fontsize=11)
+#
+#     plt.xlabel("Sample Index")
+#     plt.ylabel("ICP (mmHg)")
+#     plt.legend()
+#     plt.grid(alpha=0.3)
+#     plt.tight_layout()
+#
+#     plt.savefig(os.path.join(save_dir, f"{sheet_name}.png"), dpi=200)
+#     plt.show()
+#     plt.close()
 
-    plt.figure(figsize=(10,4))
+
+def plot_result(true, pred, corr, rmse, acc, sheet_name, save_dir):
+    # 모든 입력을 명시적으로 1D로 강제 reshape
+    true = np.asarray(true).reshape(-1)
+    pred = np.asarray(pred).reshape(-1)
+
     idx = np.arange(len(true))
 
-    plt.fill_between(idx, true, pred_s,
-                     where=true > pred_s,
-                     color='gray', alpha=0.25)
-    plt.fill_between(idx, true, pred_s,
-                     where=true < pred_s,
-                     color='gray', alpha=0.25)
+    plt.figure(figsize=(10,4))
+
+    plt.fill_between(
+        idx, true, pred,
+        where=(true > pred),
+        color='gray', alpha=0.25
+    )
+    plt.fill_between(
+        idx, true, pred,
+        where=(true < pred),
+        color='gray', alpha=0.25
+    )
 
     plt.plot(idx, true, 'k-', lw=2, label="True ICP")
-    plt.plot(idx, pred_s, 'r--', lw=2, label="Predicted ICP")
+    plt.plot(idx, pred, 'r--', lw=2, label="Predicted ICP")
 
-    plt.title(f"[LOSO Test] — {sheet_name}\n"
-              f"Corr={corr:.2f} | RMSE={rmse:.2f} | Acc={acc:.1f}%",
-              fontsize=11)
+    plt.title(
+        f"[LOSO Test] — {sheet_name}\n"
+        f"Corr={corr:.2f} | RMSE={rmse:.2f} | Acc={acc:.1f}%",
+        fontsize=11
+    )
 
     plt.xlabel("Sample Index")
     plt.ylabel("ICP (mmHg)")
@@ -113,6 +153,7 @@ def plot_result(true, pred, corr, rmse, acc, sheet_name, save_dir):
     plt.tight_layout()
 
     plt.savefig(os.path.join(save_dir, f"{sheet_name}.png"), dpi=200)
+    plt.show()
     plt.close()
 
 
@@ -197,11 +238,11 @@ for test_id in subjects:
     true = y_test.ravel()
 
     # --- Clipping + smoothing ---
-    for k in range(1, len(pred)):
-        if pred[k-1] - pred[k] > 1.0:
-            pred[k] = pred[k-1] - 1.0
-
-    pred = smooth(pred, k=2)
+    # for k in range(1, len(pred)):
+    #     if pred[k-1] - pred[k] > 1.0:
+    #         pred[k] = pred[k-1] - 1.0
+    #
+    # pred = smooth(pred, k=2)
 
     # --- Metrics ---
     corr, _ = pearsonr(true, pred)
@@ -214,8 +255,15 @@ for test_id in subjects:
 
     plot_result(true, pred, corr, rmse, acc, sheet_test, save_dir)
 
-    torch.save(model.state_dict(),
-               os.path.join(model_dir, f"{sheet_test}.pth"))
+    # --- Save full checkpoint (model + scalers) ---
+    torch.save(
+        {
+            "model_state": model.state_dict(),
+            "scaler_x": scaler_x,
+            "scaler_y": scaler_y
+        },
+        os.path.join(model_dir, f"{sheet_test}.pth")
+    )
 
 
 # ==========================================================
@@ -251,40 +299,3 @@ def merge_results(save_dir, grid_cols=5, grid_rows=10,
     print(f">>> Grid saved → {out_name}")
 
 merge_results(save_dir)
-
-
-# ==========================================================
-# 3) LOSO Model Weight Averaging (1~50 → 1 model)
-# ==========================================================
-from collections import OrderedDict
-
-print("\n==============================")
-print(" Averaging LOSO models (1~50)")
-print("==============================\n")
-
-loso_model_paths = [
-    os.path.join(model_dir, f"HM_P_REV_24_{i:03d}.pth")
-    for i in range(1, 51)
-    if os.path.exists(os.path.join(model_dir, f"HM_P_REV_24_{i:03d}.pth"))
-]
-
-assert len(loso_model_paths) > 0, "No LOSO models found."
-
-avg_state = None
-
-for idx, path in enumerate(loso_model_paths):
-    state = torch.load(path, map_location="cpu")
-
-    if avg_state is None:
-        avg_state = OrderedDict({k: v.clone() for k, v in state.items()})
-    else:
-        for k in avg_state:
-            avg_state[k] += state[k]
-
-for k in avg_state:
-    avg_state[k] /= len(loso_model_paths)
-
-final_model_path = os.path.join(model_dir, "final_loso_model.pth")
-torch.save(avg_state, final_model_path)
-
-print(f">>> Final LOSO-averaged model saved → {final_model_path}")
