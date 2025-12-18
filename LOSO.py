@@ -65,7 +65,7 @@ def smooth(x, k=2):
 
 def load_subject(excel_path, sheet_name):
     try:
-        df = pd.read_excel(excel_path, sheet_name=sheet_name, header=6).dropna(how="all")
+        df = pd.read_excel(excel_path, sheet_name=sheet_name, header=6).iloc[:32]
     except:
         return None, None
 

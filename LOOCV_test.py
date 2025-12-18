@@ -101,12 +101,13 @@ for i in range(51, 101):
             excel_path,
             sheet_name=sheet,
             header=6
-        ).dropna(how="all")
+        ).iloc[:32]
+
     except Exception as e:
         print(f"  - skipped ({e})")
         continue
 
-    # 🔴 target column is missing → only features used
+    # target column is missing → only features used
     X = df.select_dtypes(include=[np.number]).fillna(0).astype(np.float32).values
 
     if len(X) < 5:

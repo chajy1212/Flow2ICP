@@ -107,7 +107,7 @@ for i in range(1, 51):
     sheet_name = f"HM_P_REV_24_{i:03d}"
 
     try:
-        df = pd.read_excel(excel_path, sheet_name=sheet_name, header=6).dropna(how="all")
+        df = pd.read_excel(excel_path, sheet_name=sheet_name, header=6).iloc[:32]
     except Exception as e:
         print(f"[{sheet_name}] skipped ({e})")
         continue
