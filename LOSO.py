@@ -86,39 +86,7 @@ def load_subject(excel_path, sheet_name):
     return X, y
 
 
-# def plot_result(true, pred, corr, rmse, acc, sheet_name, save_dir):
-#     pred_s = smooth(pred)
-#
-#     plt.figure(figsize=(10,4))
-#     idx = np.arange(len(true))
-#
-#     plt.fill_between(idx, true, pred_s,
-#                      where=true > pred_s,
-#                      color='gray', alpha=0.25)
-#     plt.fill_between(idx, true, pred_s,
-#                      where=true < pred_s,
-#                      color='gray', alpha=0.25)
-#
-#     plt.plot(idx, true, 'k-', lw=2, label="True ICP")
-#     plt.plot(idx, pred_s, 'r--', lw=2, label="Predicted ICP")
-#
-#     plt.title(f"[LOSO Test] — {sheet_name}\n"
-#               f"Corr={corr:.2f} | RMSE={rmse:.2f} | Acc={acc:.1f}%",
-#               fontsize=11)
-#
-#     plt.xlabel("Sample Index")
-#     plt.ylabel("ICP (mmHg)")
-#     plt.legend()
-#     plt.grid(alpha=0.3)
-#     plt.tight_layout()
-#
-#     plt.savefig(os.path.join(save_dir, f"{sheet_name}.png"), dpi=200)
-#     plt.show()
-#     plt.close()
-
-
 def plot_result(true, pred, corr, rmse, acc, sheet_name, save_dir):
-    # 모든 입력을 명시적으로 1D로 강제 reshape
     true = np.asarray(true).reshape(-1)
     pred = np.asarray(pred).reshape(-1)
 
