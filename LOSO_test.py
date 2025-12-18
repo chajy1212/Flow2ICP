@@ -105,24 +105,23 @@ save_dir   = "/home/brainlab/Workspace/jycha/ICP/inference_LOSO_51_100"
 
 
 # ==========================================================
-# Load LOSO models
+# Load averaged LOSO models
 # ==========================================================
 print("\n==============================")
 print(" Loading LOSO models (1–50)")
 print("==============================\n")
 
-checkpoints = []
-for i in range(1, 51):
-    path = os.path.join(model_dir, f"HM_P_REV_24_{i:03d}.pth")
-    if not os.path.exists(path):
-        continue
+avg_model_path = os.path.join(model_dir, "Flow2ICP_LOSO_avg.pth")
+assert os.path.exists(avg_model_path), "Averaged LOSO model not found."
 
-    ckpt = torch.load(path, map_location="cpu", weights_only=False)
-    checkpoints.append(ckpt)
+# scaler는 기존 LOSO 모델 중 하나에서 로드
+ref_ckpt_path = os.path.join(model_dir, "HM_P_REV_24_001.pth")
+ref_ckpt = torch.load(ref_ckpt_path, map_location="cpu", weights_only=False)
 
-assert len(checkpoints) > 0, "No LOSO models found."
+scaler_x = ref_ckpt["scaler_x"]
+scaler_y = ref_ckpt["scaler_y"]
 
-print(f"Loaded {len(checkpoints)} LOSO models.")
+print("Loaded averaged model and reference scalers.")
 
 
 # ==========================================================
@@ -131,7 +130,7 @@ print(f"Loaded {len(checkpoints)} LOSO models.")
 summary_rows = []
 
 print("\n==============================")
-print(" LOSO Final Model Inference")
+print(" Final Inference using averaged model")
 print(" Subjects: 51–100")
 print("==============================\n")
 
@@ -144,51 +143,45 @@ for i in range(51, 101):
         print(" -> skipped (no data)")
         continue
 
-    preds = []
     d_in = X.shape[1]
 
-    for ckpt in checkpoints:
-        model = Flow2ICP(d_in=d_in)
-        model.load_state_dict(ckpt["model_state"])
-        model.eval()
+    model = Flow2ICP(d_in=d_in)
+    model.load_state_dict(torch.load(avg_model_path, map_location="cpu"))
+    model.eval()
 
-        scaler_x = ckpt["scaler_x"]
-        scaler_y = ckpt["scaler_y"]
+    X_s = scaler_x.transform(X)
 
-        X_s = scaler_x.transform(X)
+    with torch.no_grad():
+        y_hat = model(torch.tensor(X_s, dtype=torch.float32)).numpy()
 
-        with torch.no_grad():
-            y_hat = model(torch.tensor(X_s, dtype=torch.float32)).numpy()
+    pred = scaler_y.inverse_transform(y_hat).ravel()
 
-        y_hat = scaler_y.inverse_transform(y_hat).ravel()
-        preds.append(y_hat)
-
-    preds = np.stack(preds, axis=0)  # (N_models, T)
-    pred_mean = preds.mean(axis=0)  # ensemble mean
-
-    # --- Ensemble mean 후 clipping ---
-    if len(pred_mean) > 6:
-        ref = pred_mean[:-3]  # 마지막 3개 제외한 안정 구간
+    # --- Clipping ---
+    if len(pred) > 6:
+        ref = pred[:-3]
         lower = np.percentile(ref, 5)
         upper = np.percentile(ref, 95)
-        pred_mean = np.clip(pred_mean, lower, upper)
+        pred = np.clip(pred, lower, upper)
 
     # -----------------------------
     # Save per-subject CSV
     # -----------------------------
-    out_csv = os.path.join(save_dir, f"{sheet}.csv")
-    np.savetxt(out_csv, pred_mean, delimiter=",")
+    np.savetxt(
+        os.path.join(save_dir, f"{sheet}.csv"),
+        pred,
+        delimiter=","
+    )
 
     # -----------------------------
     # Plot
     # -----------------------------
-    plot_pred(pred_mean, sheet, save_dir)
+    plot_pred(pred, sheet, save_dir)
 
-    summary_rows.append([sheet] + pred_mean.tolist())
+    summary_rows.append([sheet] + pred.tolist())
 
 
 # ==========================================================
-# Summary CSV (aligned)
+# Summary CSV
 # ==========================================================
 max_len = max(len(r) - 1 for r in summary_rows)
 

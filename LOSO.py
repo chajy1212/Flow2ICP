@@ -233,6 +233,12 @@ for test_id in subjects:
         os.path.join(model_dir, f"{sheet_test}.pth")
     )
 
+    # --- Save weights only ---
+    torch.save(
+        model.state_dict(),
+        os.path.join(model_dir, f"{sheet_test}_state.pth")
+    )
+
 
 # ==========================================================
 # Summary CSV
@@ -267,3 +273,36 @@ def merge_results(save_dir, grid_cols=5, grid_rows=10,
     print(f">>> Grid saved → {out_name}")
 
 merge_results(save_dir)
+
+
+# ==========================================================
+# Build averaged LOSO model
+# ==========================================================
+def build_avg_loso_model(model_dir, d_in, out_path):
+    state_files = sorted(glob.glob(os.path.join(model_dir, "*_state.pth")))
+    assert len(state_files) > 0, "No LOSO states found"
+
+    avg_state = None
+    for f in state_files:
+        state = torch.load(f, map_location="cpu")
+        if avg_state is None:
+            avg_state = {k: v.clone() for k, v in state.items()}
+        else:
+            for k in avg_state:
+                avg_state[k] += state[k]
+
+    for k in avg_state:
+        avg_state[k] /= len(state_files)
+
+    avg_model = Flow2ICP(d_in)
+    avg_model.load_state_dict(avg_state)
+
+    torch.save(avg_model.state_dict(), out_path)
+    print(f">>> Averaged LOSO model saved → {out_path}")
+
+
+build_avg_loso_model(
+    model_dir=model_dir,
+    d_in=X_train.shape[1],
+    out_path=os.path.join(model_dir, "Flow2ICP_LOSO_avg.pth")
+)
