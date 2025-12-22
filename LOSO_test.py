@@ -104,32 +104,32 @@ save_dir   = "/home/brainlab/Workspace/jycha/ICP/inference_LOSO_51_100"
 
 
 # ==========================================================
-# Load averaged LOSO models
+# Load LOSO models
 # ==========================================================
 print("\n==============================")
 print(" Loading LOSO models (1–50)")
 print("==============================\n")
 
-avg_model_path = os.path.join(model_dir, "Flow2ICP_LOSO_avg.pth")
-assert os.path.exists(avg_model_path), "Averaged LOSO model not found."
+checkpoints = []
 
-# scaler는 기존 LOSO 모델 중 하나에서 로드
-ref_ckpt_path = os.path.join(model_dir, "HM_P_REV_24_001.pth")
-ref_ckpt = torch.load(ref_ckpt_path, map_location="cpu", weights_only=False)
+for i in range(1, 51):
+    path = os.path.join(model_dir, f"HM_P_REV_24_{i:03d}.pth")
+    if os.path.exists(path):
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
+        checkpoints.append(ckpt)
 
-scaler_x = ref_ckpt["scaler_x"]
-scaler_y = ref_ckpt["scaler_y"]
+assert len(checkpoints) > 0, "No LOSO models found."
 
-print("Loaded averaged model and reference scalers.")
+print(f"Loaded {len(checkpoints)} LOSO models.")
 
 
 # ==========================================================
-# Inference (51–100)
+# Inference (51–100) — ENSEMBLE
 # ==========================================================
 summary_rows = []
 
 print("\n==============================")
-print(" Final Inference using averaged model")
+print(" Final Inference")
 print(" Subjects: 51–100")
 print("==============================\n")
 
@@ -142,41 +142,46 @@ for i in range(51, 101):
         print(" -> skipped (no data)")
         continue
 
-    d_in = X.shape[1]
+    preds = []  # ### [MODIFIED] 모델별 예측 저장
 
-    model = Flow2ICP(d_in=d_in)
-    model.load_state_dict(torch.load(avg_model_path, map_location="cpu"))
-    model.eval()
+    for ckpt in checkpoints:
+        model = Flow2ICP(d_in=X.shape[1])
+        model.load_state_dict(ckpt["model_state"])
+        model.eval()
 
-    X_s = scaler_x.transform(X)
+        scaler_x = ckpt["scaler_x"]
+        scaler_y = ckpt["scaler_y"]
 
-    with torch.no_grad():
-        y_hat = model(torch.tensor(X_s, dtype=torch.float32)).numpy()
+        X_s = scaler_x.transform(X)
 
-    pred = scaler_y.inverse_transform(y_hat).ravel()
+        with torch.no_grad():
+            y_hat = model(torch.tensor(X_s, dtype=torch.float32)).numpy()
+
+        y_hat = scaler_y.inverse_transform(y_hat).ravel()
+        preds.append(y_hat)
+
+    preds = np.stack(preds, axis=0)     # (50, T)
+    pred_mean = preds.mean(axis=0)      # ensemble mean
+    pred_mean = np.round(pred_mean, 2)
 
     # --- Clipping ---
-    if len(pred) > 6:
-        ref = pred[:-3]
+    if len(pred_mean) > 6:
+        ref = pred_mean[:-3]
         lower = np.percentile(ref, 5)
         upper = np.percentile(ref, 95)
-        pred = np.clip(pred, lower, upper)
+        pred_mean = np.clip(pred_mean, lower, upper)
 
-    # -----------------------------
-    # Save per-subject CSV
-    # -----------------------------
+    # --- Save per-subject CSV ---
     np.savetxt(
         os.path.join(save_dir, f"{sheet}.csv"),
-        pred,
+        pred_mean,
         delimiter=","
     )
 
-    # -----------------------------
-    # Plot
-    # -----------------------------
-    plot_pred(pred, sheet, save_dir)
+    # --- Plot ---
+    plot_pred(pred_mean, sheet, save_dir)
 
-    summary_rows.append([sheet] + pred.tolist())
+    summary_rows.append([sheet] + pred_mean.tolist())
 
 
 # ==========================================================
@@ -184,19 +189,22 @@ for i in range(51, 101):
 # ==========================================================
 max_len = max(len(r) - 1 for r in summary_rows)
 
-aligned = []
+rows = []
 for r in summary_rows:
     name, vals = r[0], r[1:]
-    vals += [""] * (max_len - len(vals))
-    aligned.append([name] + vals)
+    vals = vals + [np.nan] * (max_len - len(vals))
+    rows.append([name] + vals)
 
-pd.DataFrame(aligned).to_csv(
+columns = ["sheet"] + [str(i) for i in range(1, max_len + 1)]
+
+df = pd.DataFrame(rows, columns=columns)
+
+df.to_csv(
     os.path.join(save_dir, "summary_51_100.csv"),
-    index=False,
-    header=False
+    index=False
 )
 
-print("\n>>> LOSO ensemble inference finished.")
+print("\n>>> LOSO inference finished.")
 
 
 # ============================================================
