@@ -215,7 +215,8 @@ for test_id in subjects:
     # --- Metrics ---
     corr, _ = pearsonr(true, pred)
     rmse = np.sqrt(((true - pred)**2).mean())
-    acc  = np.clip(100 * (1 - np.mean(np.abs(true - pred) / np.abs(true))), 0, 100)
+    eps = 1.0  # mmHg
+    acc  = np.clip(100 * (1 - np.mean(np.abs(true - pred) / np.maximum(np.abs(true), eps))), 0, 100)
 
     print(f"[{sheet_test}] Corr={corr:.3f} | RMSE={rmse:.3f} | Acc={acc:.2f}%")
 
