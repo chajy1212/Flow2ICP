@@ -76,7 +76,6 @@ def load_subject_X(excel_path, sheet_name):
 
 
 def plot_pred(pred, sheet_name, save_dir):
-    # pred_s = smooth(pred)
     pred_s = edge_smooth(pred, k=2, edge=3)
     idx = np.arange(len(pred_s))
 
